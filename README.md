@@ -54,9 +54,9 @@ En `Backend.gs`, edita el objeto `CONFIG` al inicio del archivo:
 
 ```javascript
 const CONFIG = {
-  HR_CALENDAR_ID: 'HR_MAIL', // Correo del calendario donde se crean los eventos
-  HR_EMAIL:       'HR_MAIL', // Correo de RR.HH. que recibe la invitación de Calendar
-  GEMINI_API_KEY: '', // API Key de Gemini para pruebas poner la que esta en apikey.txt
+  HR_CALENDAR_ID: 'HR_MAIL', // Correo del calendario donde se crean los eventos importante poner el mismo correo de la cuenta
+  HR_EMAIL: 'HR_MAIL', // Correo de RR.HH. que recibe la invitación de Calendar // Correo del calendario donde se crean los eventos importante poner el mismo correo de la cuenta
+  GEMINI_API_KEY: '', // API Key de Gemini para pruebas apikey.txt 
   GEMINI_ENDPOINT: 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent',
   TIMEZONE: 'America/Caracas', // Ver tabla de zonas horarias abajo
 };
