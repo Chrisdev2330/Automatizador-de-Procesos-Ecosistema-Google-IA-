@@ -1,0 +1,203 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Agendador Técnico · EADIC</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet" />
+  <?!= include('Estilos') ?>
+</head>
+
+<body>
+
+  <!-- HEADER -->
+  <header class="app-header">
+    <div class="header-inner">
+      <div class="brand">
+        <span class="brand-logo">EADIC</span>
+        <span class="brand-sep"></span>
+        <span class="brand-tagline">Agendador Técnico Inteligente</span>
+      </div>
+      <div class="header-badge">
+        <span class="pulse-dot"></span>
+        <span>Disponibilidad en tiempo real</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- PANTALLA DE CARGA -->
+  <div id="loading-screen" class="loading-screen">
+    <div class="loading-card">
+      <div class="spinner-ring"></div>
+      <p class="loading-title">Cargando disponibilidad de RR.HH.</p>
+      <p class="loading-sub">Leyendo el calendario en tiempo real…</p>
+    </div>
+  </div>
+
+  <!-- SPLIT VIEW PRINCIPAL -->
+  <main class="split-layout" id="main-content" style="display:none;">
+
+    <!-- PANEL IZQUIERDO: agenda de RR.HH. -->
+    <section class="panel panel-left" aria-label="Disponibilidad de RR.HH.">
+      <div class="panel-header">
+        <div class="panel-icon">&#128197;</div>
+        <div>
+          <h2 class="panel-title">Disponibilidad · RR.HH.</h2>
+          <p class="panel-sub">Selecciona un horario disponible</p>
+        </div>
+      </div>
+
+      <div class="filter-row" id="day-filters" role="group" aria-label="Filtrar por día"></div>
+
+      <div class="slots-container" id="slots-container" role="listbox" aria-label="Horarios disponibles"></div>
+
+      <div class="empty-state" id="empty-state" style="display:none;">
+        <div class="empty-icon">&#128235;</div>
+        <p class="empty-title">Sin disponibilidad</p>
+        <p class="empty-desc">No hay horarios libres en los próximos 7 días.<br>Contacta a RR.HH. para coordinar.</p>
+      </div>
+    </section>
+
+    <!-- PANEL DERECHO: formulario -->
+    <section class="panel panel-right" aria-label="Formulario de agendamiento">
+      <div class="panel-header">
+        <div class="panel-icon">&#9997;&#65039;</div>
+        <div>
+          <h2 class="panel-title">Confirmar Entrevista</h2>
+          <p class="panel-sub">Completa los datos para agendar</p>
+        </div>
+      </div>
+
+      <!-- Banner del slot seleccionado -->
+      <div class="selected-slot-banner" id="selected-banner" style="display:none;">
+        <div class="selected-slot-icon">&#9989;</div>
+        <div>
+          <p class="selected-slot-label">Horario seleccionado</p>
+          <p class="selected-slot-value" id="selected-slot-text">—</p>
+        </div>
+        <button class="btn-clear-slot" id="btn-clear-slot" title="Cambiar horario" aria-label="Cambiar horario">&#10005;</button>
+      </div>
+
+      <div class="no-slot-hint" id="no-slot-hint">
+        <span>&#128072;</span>
+        <p>Selecciona un horario en el panel izquierdo para continuar.</p>
+      </div>
+
+      <!-- Formulario -->
+      <div id="form-wrapper">
+        <div class="form-grid">
+
+          <fieldset class="form-section">
+            <legend class="form-legend">Candidato</legend>
+            <div class="field-group">
+              <label class="field-label" for="candidateName">Nombre completo <span class="req">*</span></label>
+              <input class="field-input" type="text" id="candidateName" placeholder="Ej: Laura Martínez García" autocomplete="off" required />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="candidateEmail">Correo electrónico <span class="req">*</span></label>
+              <input class="field-input" type="email" id="candidateEmail" placeholder="candidato@email.com" autocomplete="off" required />
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="form-legend">Posición</legend>
+            <div class="field-group">
+              <label class="field-label" for="roleName">Rol a evaluar <span class="req">*</span></label>
+              <div class="select-wrapper">
+                <select class="field-input field-select" id="roleName" required>
+                  <option value="" disabled selected>Selecciona el rol…</option>
+                  <optgroup label="Ingeniería">
+                    <option>Desarrollador Backend Senior</option>
+                    <option>Desarrollador Frontend Senior</option>
+                    <option>Desarrollador Full Stack</option>
+                    <option>Ingeniero DevOps / Cloud</option>
+                    <option>Ingeniero de Datos</option>
+                    <option>Arquitecto de Software</option>
+                  </optgroup>
+                  <optgroup label="Gestión">
+                    <option>Tech Lead</option>
+                    <option>Product Manager</option>
+                    <option>Scrum Master</option>
+                  </optgroup>
+                  <optgroup label="Otro">
+                    <option value="__custom__">Otro (especificar…)</option>
+                  </optgroup>
+                </select>
+                <span class="select-arrow">&#9662;</span>
+              </div>
+            </div>
+            <div class="field-group" id="custom-role-group" style="display:none;">
+              <label class="field-label" for="customRole">Describe el rol</label>
+              <input class="field-input" type="text" id="customRole" placeholder="Ej: Especialista en IA Generativa" />
+            </div>
+          </fieldset>
+
+          <fieldset class="form-section">
+            <legend class="form-legend">Entrevistador Técnico</legend>
+            <div class="field-group">
+              <label class="field-label" for="interviewerName">Tu nombre <span class="req">*</span></label>
+              <input class="field-input" type="text" id="interviewerName" placeholder="Ej: Carlos Rodríguez" autocomplete="name" required />
+            </div>
+            <div class="field-group">
+              <label class="field-label" for="interviewerEmail">Tu correo corporativo <span class="req">*</span></label>
+              <input class="field-input" type="email" id="interviewerEmail" placeholder="entrevistador@eadic.com" autocomplete="email" required />
+            </div>
+          </fieldset>
+
+        </div>
+
+        <div class="form-actions">
+          <button class="btn-primary" id="btn-schedule" disabled>
+            <span class="btn-icon">&#128640;</span>
+            <span class="btn-text">Agendar Entrevista</span>
+          </button>
+          <p class="form-note">Se creará el evento en Google Calendar y se enviarán las invitaciones automáticamente a las tres partes.</p>
+        </div>
+      </div>
+
+    </section>
+  </main>
+
+  <!-- MODAL: procesando -->
+  <div class="modal-overlay" id="modal-processing" style="display:none;" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+    <div class="modal-card">
+      <div class="ai-animation">
+        <div class="ai-ring ai-ring--1"></div>
+        <div class="ai-ring ai-ring--2"></div>
+        <div class="ai-ring ai-ring--3"></div>
+        <span class="ai-emoji">&#129302;</span>
+      </div>
+      <h3 class="modal-title" id="modal-title">Procesando…</h3>
+      <p class="modal-step">Conectando con Gemini AI para redactar la invitación</p>
+      <div class="modal-steps">
+        <div class="mstep" id="mstep-1"><span class="mstep-dot"></span><span>Generando correo con Gemini AI</span></div>
+        <div class="mstep" id="mstep-2"><span class="mstep-dot"></span><span>Creando evento en Google Calendar</span></div>
+        <div class="mstep" id="mstep-3"><span class="mstep-dot"></span><span>Enviando invitaciones por Gmail</span></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- MODAL: resultado -->
+  <div class="modal-overlay" id="modal-result" style="display:none;" role="dialog" aria-modal="true">
+    <div class="modal-card modal-card--result" id="modal-result-card">
+      <div class="result-icon" id="result-icon">&#127881;</div>
+      <h3 class="modal-title" id="result-title">Entrevista agendada</h3>
+      <p class="modal-step" id="result-message"></p>
+      <button class="btn-primary btn-result" id="btn-result-close">Agendar otra entrevista</button>
+    </div>
+  </div>
+
+  <!-- FOOTER -->
+  <footer class="app-footer">
+    <span>&#169; <?= new Date().getFullYear() ?> EADIC</span>
+    <span class="footer-sep">·</span>
+    <span>Agendador Técnico Inteligente</span>
+    <span class="footer-sep">·</span>
+    <span>Google Apps Script &amp; Gemini AI</span>
+  </footer>
+
+  <?!= include('Funciones') ?>
+</body>
+</html>

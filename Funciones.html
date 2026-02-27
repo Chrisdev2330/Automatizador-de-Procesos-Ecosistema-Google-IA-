@@ -1,0 +1,322 @@
+<script>
+// Estado global de la aplicación
+const AppState = {
+  slots:           [],
+  filteredSlots:   [],
+  selectedSlot:    null,
+  activeDayFilter: 'all',
+  isScheduling:    false,
+};
+
+// Referencias DOM
+const DOM = {
+  loadingScreen:    () => document.getElementById('loading-screen'),
+  mainContent:      () => document.getElementById('main-content'),
+  slotsContainer:   () => document.getElementById('slots-container'),
+  emptyState:       () => document.getElementById('empty-state'),
+  dayFilters:       () => document.getElementById('day-filters'),
+  selectedBanner:   () => document.getElementById('selected-banner'),
+  selectedSlotText: () => document.getElementById('selected-slot-text'),
+  noSlotHint:       () => document.getElementById('no-slot-hint'),
+  btnSchedule:      () => document.getElementById('btn-schedule'),
+  btnClearSlot:     () => document.getElementById('btn-clear-slot'),
+  candidateName:    () => document.getElementById('candidateName'),
+  candidateEmail:   () => document.getElementById('candidateEmail'),
+  roleName:         () => document.getElementById('roleName'),
+  customRoleGroup:  () => document.getElementById('custom-role-group'),
+  customRole:       () => document.getElementById('customRole'),
+  interviewerName:  () => document.getElementById('interviewerName'),
+  interviewerEmail: () => document.getElementById('interviewerEmail'),
+  modalProcessing:  () => document.getElementById('modal-processing'),
+  modalResult:      () => document.getElementById('modal-result'),
+  resultIcon:       () => document.getElementById('result-icon'),
+  resultTitle:      () => document.getElementById('result-title'),
+  resultMessage:    () => document.getElementById('result-message'),
+  btnResultClose:   () => document.getElementById('btn-result-close'),
+  mstep:            (n) => document.getElementById('mstep-' + n),
+};
+
+// Inicialización
+document.addEventListener('DOMContentLoaded', () => {
+  initEventListeners();
+  loadSlots();
+});
+
+// Solicita los slots disponibles al servidor
+function loadSlots() {
+  google.script.run
+    .withSuccessHandler(onSlotsLoaded)
+    .withFailureHandler(onSlotsError)
+    .getAvailableSlots();
+}
+
+function onSlotsLoaded(slots) {
+  AppState.slots = slots || [];
+  AppState.filteredSlots = [...AppState.slots];
+
+  DOM.loadingScreen().style.display = 'none';
+  DOM.mainContent().style.display   = '';
+
+  if (AppState.slots.length === 0) {
+    DOM.emptyState().style.display     = '';
+    DOM.slotsContainer().style.display = 'none';
+    return;
+  }
+
+  buildDayFilters();
+  renderSlots(AppState.filteredSlots);
+}
+
+function onSlotsError(err) {
+  DOM.loadingScreen().innerHTML = `
+    <div class="loading-card">
+      <div style="font-size:2.5rem;margin-bottom:16px;opacity:.6">&#9888;</div>
+      <p class="loading-title" style="color:#ef4444;">Error al cargar disponibilidad</p>
+      <p class="loading-sub">${err.message || 'Verifica los permisos del calendario.'}</p>
+      <button class="btn-primary" onclick="location.reload()" style="margin-top:24px;max-width:180px;">Reintentar</button>
+    </div>`;
+}
+
+// Renderiza los slots agrupados por día
+function renderSlots(slotsToRender) {
+  const container = DOM.slotsContainer();
+  container.innerHTML = '';
+
+  if (slotsToRender.length === 0) {
+    container.innerHTML = `<div style="text-align:center;padding:40px;color:var(--text-3);font-size:.85rem;">No hay horarios para este día.</div>`;
+    return;
+  }
+
+  const groups = {};
+  slotsToRender.forEach(slot => {
+    const dayKey = slot.iso.split('T')[0];
+    if (!groups[dayKey]) groups[dayKey] = [];
+    groups[dayKey].push(slot);
+  });
+
+  Object.entries(groups).forEach(([day, slots]) => {
+    const groupEl = document.createElement('div');
+    groupEl.className = 'slot-day-group';
+    groupEl.innerHTML = `<div class="slot-day-label">${formatDayLabel(day)}</div>`;
+    slots.forEach(slot => groupEl.appendChild(createSlotItem(slot)));
+    container.appendChild(groupEl);
+  });
+}
+
+function createSlotItem(slot) {
+  const el = document.createElement('div');
+  el.className   = 'slot-item';
+  el.dataset.iso = slot.iso;
+  el.role        = 'option';
+  el.tabIndex    = 0;
+  el.setAttribute('aria-label', 'Horario: ' + slot.label);
+
+  const timePart = slot.label.split('·')[1]?.trim() || slot.label;
+  const datePart = slot.label.split('·')[0]?.trim() || '';
+
+  el.innerHTML = `
+    <div class="slot-time-badge">${timePart}</div>
+    <div class="slot-details">
+      <div class="slot-label">${datePart}</div>
+      <div class="slot-duration">60 min · Videollamada</div>
+    </div>
+    <span class="slot-check">&#9989;</span>`;
+
+  if (AppState.selectedSlot && AppState.selectedSlot.iso === slot.iso) {
+    el.classList.add('selected');
+  }
+
+  el.addEventListener('click', () => selectSlot(slot, el));
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); selectSlot(slot, el); }
+  });
+
+  return el;
+}
+
+// Selecciona un slot y actualiza la UI
+function selectSlot(slot, el) {
+  document.querySelectorAll('.slot-item.selected').forEach(s => s.classList.remove('selected'));
+  el.classList.add('selected');
+  AppState.selectedSlot = slot;
+
+  DOM.selectedSlotText().textContent = slot.label;
+  DOM.selectedBanner().style.display = '';
+  DOM.noSlotHint().style.display     = 'none';
+
+  updateScheduleButton();
+
+  if (window.innerWidth < 900) {
+    DOM.mainContent().querySelector('.panel-right').scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+}
+
+function clearSlot() {
+  AppState.selectedSlot = null;
+  document.querySelectorAll('.slot-item.selected').forEach(s => s.classList.remove('selected'));
+  DOM.selectedBanner().style.display = 'none';
+  DOM.noSlotHint().style.display     = '';
+  updateScheduleButton();
+}
+
+// Construye los botones de filtro por día
+function buildDayFilters() {
+  const filtersEl = DOM.dayFilters();
+  const days = [...new Set(AppState.slots.map(s => s.iso.split('T')[0]))];
+
+  filtersEl.appendChild(createFilterBtn('Todos', 'all', true));
+  days.slice(0, 6).forEach(day => filtersEl.appendChild(createFilterBtn(formatShortDay(day), day, false)));
+}
+
+function createFilterBtn(label, value, active) {
+  const btn = document.createElement('button');
+  btn.className    = 'filter-btn' + (active ? ' active' : '');
+  btn.textContent  = label;
+  btn.dataset.day  = value;
+  btn.addEventListener('click', () => applyDayFilter(value));
+  return btn;
+}
+
+function applyDayFilter(dayKey) {
+  AppState.activeDayFilter = dayKey;
+  document.querySelectorAll('.filter-btn').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.day === dayKey);
+  });
+  AppState.filteredSlots = dayKey === 'all'
+    ? [...AppState.slots]
+    : AppState.slots.filter(s => s.iso.startsWith(dayKey));
+  renderSlots(AppState.filteredSlots);
+}
+
+// Habilita/deshabilita el botón según validación del formulario
+function updateScheduleButton() {
+  const emailRe  = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  const roleVal  = DOM.roleName().value;
+  const finalRole = roleVal === '__custom__' ? DOM.customRole().value.trim() : roleVal;
+
+  const valid =
+    AppState.selectedSlot &&
+    DOM.candidateName().value.trim() &&
+    emailRe.test(DOM.candidateEmail().value.trim()) &&
+    finalRole &&
+    DOM.interviewerName().value.trim() &&
+    emailRe.test(DOM.interviewerEmail().value.trim());
+
+  DOM.btnSchedule().disabled = !valid;
+}
+
+// Recoge el formulario y llama al servidor para agendar
+function scheduleInterview() {
+  if (AppState.isScheduling || !AppState.selectedSlot) return;
+  AppState.isScheduling = true;
+
+  const roleVal   = DOM.roleName().value;
+  const finalRole = roleVal === '__custom__' ? DOM.customRole().value.trim() : roleVal;
+
+  const formData = {
+    slotIso:          AppState.selectedSlot.iso,
+    slotLabel:        AppState.selectedSlot.label,
+    candidateName:    DOM.candidateName().value.trim(),
+    candidateEmail:   DOM.candidateEmail().value.trim(),
+    roleName:         finalRole,
+    interviewerName:  DOM.interviewerName().value.trim(),
+    interviewerEmail: DOM.interviewerEmail().value.trim(),
+  };
+
+  showProcessingModal();
+
+  google.script.run
+    .withSuccessHandler(onScheduleSuccess)
+    .withFailureHandler(onScheduleError)
+    .scheduleInterview(formData);
+}
+
+function showProcessingModal() {
+  DOM.modalProcessing().style.display = '';
+  const delays = [0, 2500, 5000];
+  [1, 2, 3].forEach((n, i) => {
+    setTimeout(() => {
+      if (n > 1) DOM.mstep(n - 1).className = 'mstep done';
+      DOM.mstep(n).className = 'mstep active';
+    }, delays[i]);
+  });
+}
+
+function onScheduleSuccess(result) {
+  AppState.isScheduling = false;
+  DOM.modalProcessing().style.display = 'none';
+
+  DOM.resultIcon().innerHTML      = result.success ? '&#127881;' : '&#9888;&#65039;';
+  DOM.resultTitle().textContent   = result.success ? 'Entrevista agendada' : 'Algo salió mal';
+  DOM.resultMessage().textContent = result.message;
+  DOM.modalResult().style.display = '';
+}
+
+function onScheduleError(err) {
+  AppState.isScheduling = false;
+  DOM.modalProcessing().style.display = 'none';
+
+  DOM.resultIcon().innerHTML      = '&#10060;';
+  DOM.resultTitle().textContent   = 'Error de conexión';
+  DOM.resultMessage().textContent = err.message || 'No se pudo completar el agendamiento.';
+  DOM.modalResult().style.display = '';
+}
+
+// Cierra el modal de resultado y reinicia la app
+function closeResultModal() {
+  DOM.modalResult().style.display = 'none';
+  [1, 2, 3].forEach(n => { DOM.mstep(n).className = 'mstep'; });
+
+  ['candidateName','candidateEmail','interviewerName','interviewerEmail'].forEach(id => {
+    document.getElementById(id).value = '';
+    document.getElementById(id).classList.remove('error');
+  });
+  DOM.roleName().selectedIndex = 0;
+  DOM.customRoleGroup().style.display = 'none';
+
+  clearSlot();
+  loadSlots();
+}
+
+// Event listeners
+function initEventListeners() {
+  DOM.btnSchedule().addEventListener('click', scheduleInterview);
+  DOM.btnClearSlot().addEventListener('click', clearSlot);
+  DOM.btnResultClose().addEventListener('click', closeResultModal);
+
+  ['candidateName','candidateEmail','interviewerName','interviewerEmail'].forEach(id => {
+    const el = document.getElementById(id);
+    el.addEventListener('input', updateScheduleButton);
+    el.addEventListener('blur', () => validateField(el));
+  });
+
+  DOM.roleName().addEventListener('change', () => {
+    const isCustom = DOM.roleName().value === '__custom__';
+    DOM.customRoleGroup().style.display = isCustom ? '' : 'none';
+    if (isCustom) DOM.customRole().focus();
+    updateScheduleButton();
+  });
+
+  DOM.customRole().addEventListener('input', updateScheduleButton);
+}
+
+function validateField(el) {
+  const emailFields = ['candidateEmail', 'interviewerEmail'];
+  const emailRe     = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+  if (!el.value.trim() || (emailFields.includes(el.id) && !emailRe.test(el.value.trim()))) {
+    el.classList.add('error');
+  } else {
+    el.classList.remove('error');
+  }
+}
+
+// Formatea 'YYYY-MM-DD' a texto legible
+function formatDayLabel(dayStr) {
+  return new Date(dayStr + 'T12:00:00').toLocaleDateString('es-ES', { weekday:'long', day:'numeric', month:'long' });
+}
+
+function formatShortDay(dayStr) {
+  return new Date(dayStr + 'T12:00:00').toLocaleDateString('es-ES', { weekday:'short', day:'numeric' });
+}
+</script>
