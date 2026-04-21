@@ -1,4 +1,5 @@
-# Agendador Técnico Inteligente · EADIC
+# Agendador Técnico Inteligente
+
 
 Herramienta Micro-SaaS interna que automatiza el agendamiento de entrevistas técnicas entre RR.HH., Entrevistadores Técnicos y Candidatos — eliminando los correos de coordinación.
 
